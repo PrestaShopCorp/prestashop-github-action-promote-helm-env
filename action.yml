@@ -1,0 +1,141 @@
+name: "Promote Helm Env"
+description: "Promote app versions from a source environment to a target environment across all Helm apps, creating/refreshing PRs per app as needed."
+inputs:
+  source_env:
+    description: "Source environment (e.g., preproduction, integration)"
+    required: true
+  target_env:
+    description: "Target environment (e.g., production, preproduction)"
+    required: true
+  base_branch:
+    description: "Base branch for promotion PRs"
+    required: false
+    default: "main"
+  app_glob:
+    description: "Glob for apps to process"
+    required: false
+    default: "helm/apps/*"
+
+runs:
+  using: "composite"
+  steps:
+  - name: Configure Git
+    shell: bash
+    run: |
+      git config --global user.name "github-actions[bot]"
+      git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+  - name: Install yq
+    shell: bash
+    run: |
+      wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+      chmod +x /usr/local/bin/yq
+
+  - name: Promote source -> target
+    shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    run: |
+      set -euo pipefail
+
+      APP_GLOB="${{ inputs.app_glob }}"
+      SOURCE_ENV="${{ inputs.source_env }}"
+      TARGET_ENV="${{ inputs.target_env }}"
+      BASE_BRANCH="${{ inputs.base_branch }}"
+
+      echo "Processing apps in: ${APP_GLOB}"
+      for app_dir in ${APP_GLOB}/; do
+        app_name=$(basename "$app_dir")
+        echo "Checking app: $app_name"
+
+        SOURCE_FILE="${app_dir}values/appversion-${SOURCE_ENV}.values.yaml"
+        TARGET_FILE="${app_dir}values/appversion-${TARGET_ENV}.values.yaml"
+
+        if [[ ! -f "$SOURCE_FILE" ]]; then
+          echo "No source values file found for $app_name at $SOURCE_FILE. Skipping."
+          echo "--------------------------------------------------"
+          continue
+        fi
+
+        if [[ ! -f "$TARGET_FILE" ]]; then
+          echo "No target values file found for $app_name at $TARGET_FILE. Skipping."
+          echo "--------------------------------------------------"
+          continue
+        fi
+
+        # Extract tags using yq (assuming standard structure: image.tag)
+        SOURCE_TAG=$(yq '.image.tag' "$SOURCE_FILE" || echo "")
+        TARGET_TAG=$(yq '.image.tag' "$TARGET_FILE" || echo "")
+
+        echo "  Source(${SOURCE_ENV}) tag: $SOURCE_TAG"
+        echo "  Target(${TARGET_ENV}) tag: $TARGET_TAG"
+
+        if [[ -z "$SOURCE_TAG" ]]; then
+          echo "  Source tag missing or unreadable. Skipping $app_name."
+          echo "--------------------------------------------------"
+          continue
+        fi
+
+        if [[ "$SOURCE_TAG" != "$TARGET_TAG" ]]; then
+          echo "  Version mismatch! Promotion required."
+
+          BRANCH_NAME="promote/${app_name}-${SOURCE_ENV}-to-${TARGET_ENV}"
+          PR_TITLE="chore(${app_name}): promote ${SOURCE_ENV} -> ${TARGET_ENV} ${SOURCE_TAG}"
+          PR_BODY="Promoting version \`${SOURCE_TAG}\` from \`${SOURCE_ENV}\` to \`${TARGET_ENV}\` for app \`${app_name}\`."
+
+          # Fetch origin to have latest state
+          git fetch origin
+
+          # Check if an open PR exists for this branch
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --base "$BASE_BRANCH" --json number --jq '.[0].number') || EXISTING_PR=""
+
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "  Found existing open PR #$EXISTING_PR. Updating existing branch."
+            # Checkout the existing remote branch to append to it
+            git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME"
+          else
+            echo "  No open PR found. Creating new promotion branch from $BASE_BRANCH."
+            # Force create/reset branch from base
+            git checkout -B "$BRANCH_NAME" "$BASE_BRANCH"
+          fi
+
+          # Update the target file with the source tag
+          yq -i ".image.tag = \"$SOURCE_TAG\"" "$TARGET_FILE"
+
+          # Check if there are changes
+          if git diff --quiet "$TARGET_FILE"; then
+            echo "  No changes detected in $TARGET_FILE after update (already updated?). Skipping."
+            git checkout "$BASE_BRANCH"
+            echo "--------------------------------------------------"
+            continue
+          fi
+
+          git add "$TARGET_FILE"
+          git commit -m "$PR_TITLE"
+
+          # Force push to ensure the branch matches our new state (especially if we reset from base)
+          git push -f origin "$BRANCH_NAME"
+
+          # Ensure label exists
+          gh label create "app:$app_name" --force 2>/dev/null || true
+
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "  Updating PR #$EXISTING_PR..."
+            gh pr edit "$EXISTING_PR" --title "$PR_TITLE" --body "$PR_BODY" --add-label "app:$app_name"
+          else
+            echo "  Creating new PR..."
+            gh pr create \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY" \
+              --label "app:$app_name" \
+              --head "$BRANCH_NAME" \
+              --base "$BASE_BRANCH"
+          fi
+
+          # Switch back to base for next app
+          git checkout "$BASE_BRANCH"
+        else
+          echo "  Versions match. No promotion needed."
+        fi
+        echo "--------------------------------------------------"
+      done

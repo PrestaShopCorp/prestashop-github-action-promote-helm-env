@@ -1,0 +1,36 @@
+name: Github Action auto documentation
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    name: GHA Autodocumentation
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Run auto-doc on FR version
+        uses: tj-actions/auto-doc@v3
+
+      - name: Verify Changed files
+        uses: tj-actions/verify-changed-files@v17
+        id: verify-changed-files
+        with:
+          files: |
+            README.md
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: "docs: update documentation"
+          title: "docs: update documentation"
+          body: Update Github Action documentations files
+          branch: docs/automated-update
+          delete-branch: true

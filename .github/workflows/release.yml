@@ -1,0 +1,13 @@
+name: 'Release major version'
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    name: 'Release major version'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: nowactions/update-majorver@v1
