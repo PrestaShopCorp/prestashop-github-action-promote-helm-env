@@ -1,4 +1,4 @@
-name: 'Release major version'
+name: "Release major version"
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   release:
-    name: 'Release major version'
-    runs-on: 'ubuntu-latest'
+    name: "Release major version"
+    runs-on: "ubuntu-latest"
     steps:
       - uses: nowactions/update-majorver@v1
