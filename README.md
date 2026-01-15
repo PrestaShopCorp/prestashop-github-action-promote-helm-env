@@ -21,11 +21,11 @@ The GitHub Action 'Promote Helm Env' automates the promotion of application vers
 
 <!-- AUTO-DOC-INPUT:START - Do not remove or modify this section -->
 
-| INPUT                                                             | TYPE   | REQUIRED | DEFAULT         | DESCRIPTION                                               |
-| ----------------------------------------------------------------- | ------ | -------- | --------------- | --------------------------------------------------------- |
-| <a name="input_source_env"></a>[source_env](#input_source_env)    | string | true     |                 | Source environment <br>(e.g., preproduction, integration) |
-| <a name="input_target_env"></a>[target_env](#input_target_env)    | string | true     |                 | Target environment <br>(e.g., production, preproduction)  |
-| <a name="input_base_branch"></a>[base_branch](#input_base_branch) | string | false    | `"main"`        | Base branch for promotion PRs                             |
-| <a name="input_app_glob"></a>[app_glob](#input_app_glob)          | string | false    | `"helm/apps/*"` | Glob for apps to process                                  |
+|                               INPUT                               |  TYPE  | REQUIRED |     DEFAULT     |                      DESCRIPTION                      |
+|-------------------------------------------------------------------|--------|----------|-----------------|-------------------------------------------------------|
+|     <a name="input_app_glob"></a>[app_glob](#input_app_glob)      | string |  false   | `"helm/apps/*"` |               Glob for apps to process                |
+| <a name="input_base_branch"></a>[base_branch](#input_base_branch) | string |  false   |    `"main"`     |             Base branch for promotion PRs             |
+|  <a name="input_source_env"></a>[source_env](#input_source_env)   | string |   true   |                 | Source environment (e.g., preproduction, integration) |
+|  <a name="input_target_env"></a>[target_env](#input_target_env)   | string |   true   |                 | Target environment (e.g., production, preproduction)  |
 
 <!-- AUTO-DOC-INPUT:END -->
